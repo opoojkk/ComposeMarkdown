@@ -176,14 +176,17 @@ private fun ASTNode.toBlock(source: String, index: Int): MdBlock? {
         MarkdownElementTypes.PARAGRAPH -> {
             val inlines = parseInlinesFromAst(this, source)
             val standaloneImage = inlines.standaloneInlineImage()
-            if (standaloneImage != null) {
+            val rawImage = standaloneImage ?: raw.parseStandaloneImageFromRaw()?.let {
+                InlineImage(it.alt, it.url, it.title)
+            }
+            if (rawImage != null) {
                 ImageBlock(
                     id = id,
                     raw = raw,
                     range = range,
-                    alt = standaloneImage.alt,
-                    url = standaloneImage.url,
-                    title = standaloneImage.title,
+                    alt = rawImage.alt,
+                    url = rawImage.url,
+                    title = rawImage.title,
                 )
             } else {
                 ParagraphBlock(
@@ -454,6 +457,18 @@ private fun parseLinkInline(node: ASTNode, source: String): LinkInline? {
 
 private data class ParsedImageData(val alt: String?, val url: String, val title: String?)
 
+private val StandaloneImageRegex = Regex(
+    pattern = """^\s*!\[(.*?)]\((\S+?)(?:\s+["'](.*?)["'])?\)\s*$""",
+)
+
+private fun String.parseStandaloneImageFromRaw(): ParsedImageData? {
+    val match = StandaloneImageRegex.matchEntire(this) ?: return null
+    val alt = match.groupValues[1].ifBlank { null }
+    val url = match.groupValues[2].ifBlank { return null }
+    val title = match.groupValues.getOrNull(3)?.ifBlank { null }
+    return ParsedImageData(alt = alt, url = url, title = title)
+}
+
 private fun parseImageInline(node: ASTNode, source: String): ParsedImageData? {
     val textNode = node.findChildOfType(MarkdownElementTypes.LINK_TEXT)
     val destinationNode = node.findChildOfType(MarkdownElementTypes.LINK_DESTINATION)
@@ -715,41 +730,39 @@ private fun RenderBlock(
             TableRow(block.header, isHeader = true)
             block.body.forEach { row -> TableRow(row, isHeader = false) }
         }
-        is ImageBlock -> {
-            Column(
+        is ImageBlock -> Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onImageClick(block.url) },
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            SubcomposeAsyncImage(
+                model = block.url,
+                contentDescription = block.alt,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onImageClick(block.url) },
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                SubcomposeAsyncImage(
-                    model = block.url,
-                    contentDescription = block.alt,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp),
-                    loading = {
-                        Text(
-                            text = "Loading image...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    error = {
-                        Text(
-                            text = "Image load failed: ${block.url}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    },
-                )
-                if (!block.alt.isNullOrBlank()) {
+                    .heightIn(min = 120.dp),
+                loading = {
                     Text(
-                        text = block.alt,
+                        text = "Loading image...",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
+                },
+                error = {
+                    Text(
+                        text = "Image load failed: ${block.url}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+            )
+            if (!block.alt.isNullOrBlank()) {
+                Text(
+                    text = block.alt,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
