@@ -1,58 +1,28 @@
 # ComposeMarkdown
 
-A Compose Multiplatform Markdown component focused on parsing and rendering Markdown content in shared UI.
+[简体中文](README.zh-CN.md)
 
-## Features
+`ComposeMarkdown` is a **Compose Multiplatform** Markdown rendering component designed for shared UI layers. It aims to provide a reusable, extensible, and customizable solution for displaying Markdown content across platforms.
 
-- `MdDocument` + `MdBlock`/`MdInline` render model
-- `MarkdownParser` based on JetBrains Markdown AST
-- `Markdown(...)` composable for rendering Markdown strings or pre-parsed documents
-- `MarkdownStyle` + `MarkdownDefaults` for style customization
-- Custom link and image click callbacks
-- Optional custom image renderer slot
-- Optional custom block renderer slot with default-content fallback
-- Optional dedicated HTML block renderer slot
-- Optional dedicated inline-image renderer slot
-- Optional inline rendering slot based on `AnnotatedString.Builder`
-- Table alignment metadata mapped into the render model
-- HTML block support rendered as dedicated raw-content blocks
-- GFM strikethrough inline support
-- GFM inline math and block math support
-- `UnsupportedBlock` fallback to avoid silently dropping unsupported syntax
+The project currently focuses on:
 
-## Dependency
+- Parsing and rendering Markdown in `commonMain`
+- Providing a stable document model instead of exposing the underlying AST directly to business code
+- Offering useful default rendering behavior while keeping enough extension points for customization
 
-```kotlin
-sourceSets {
-    commonMain.dependencies {
-        implementation("org.jetbrains:markdown:0.7.3")
-        implementation("io.coil-kt.coil3:coil-compose:3.0.4")
-    }
-}
-```
+## Positioning
 
-## Package Layout
+This repository is not a Markdown editor. It is a **Markdown viewer / renderer component**.
 
-- `com.composemarkdown.model`: document and inline/block model
-- `com.composemarkdown.parser`: Markdown parsing
-- `com.composemarkdown.ui`: public composables and styles
+It is well suited for:
 
-## Supported Syntax
-
-- Heading
-- Paragraph
-- Quote
-- List and nested list
-- Task list
-- Code fence and indented code block
-- Horizontal rule
-- Pipe table with start/center/end alignment
-- HTML block
-- Block math
-- Image block
-- Inline emphasis, strong, strikethrough, code, math, link, inline image token
+- Chat messages, article details, help center pages, announcements, and similar Markdown-based content
+- Shared UI components in Compose Multiplatform projects
+- Product scenarios that need default rendering with partial custom overrides
 
 ## Usage
+
+### 1. Render directly from a Markdown string
 
 ```kotlin
 import com.composemarkdown.ui.Markdown
@@ -70,7 +40,9 @@ Markdown(
 )
 ```
 
-## Pre-parsed Usage
+### 2. Parse first, then render
+
+This is useful when you want to cache parsed results and avoid repeated parsing.
 
 ```kotlin
 import com.composemarkdown.parser.MarkdownParser
@@ -82,62 +54,103 @@ val document = parser.parse(markdown)
 Markdown(document = document)
 ```
 
-## Customization
+### 3. Customize styles
+
+The repository already supports style overrides through `MarkdownStyle` and `MarkdownDefaults`.
+
+```kotlin
+import com.composemarkdown.ui.Markdown
+import com.composemarkdown.ui.MarkdownDefaults
+
+Markdown(
+    markdown = markdown,
+    style = MarkdownDefaults.style().copy(
+        blockSpacing = 12.dp,
+        linkColor = MaterialTheme.colorScheme.primary,
+    ),
+)
+```
+
+### 4. Customize partial rendering
+
+You can override block content, HTML blocks, images, and inline rendering behavior.
 
 ```kotlin
 Markdown(
     markdown = markdown,
-    htmlBlockContent = { htmlBlock ->
-        // render raw html block your own way
-    },
-    inlineImageContent = { inlineImage, style ->
-        withStyle(SpanStyle(color = style.linkColor)) {
-            append("[img:${inlineImage.alt ?: inlineImage.url}]")
-        }
-    },
     style = MarkdownDefaults.style(),
+    htmlBlockContent = { htmlBlock ->
+        // Custom HTML block rendering
+    },
     imageContent = { image ->
-        // render your own image composable
+        // Custom block image rendering
     },
     blockContent = { block, defaultContent ->
+        // Intercept blocks when needed
+        defaultContent()
+    },
+    inlineContent = { inline, style, defaultContent ->
+        // Intercept inline rendering when needed
         defaultContent()
     },
 )
 ```
 
-## Inline Customization
+`inlineImageContent` takes priority over the generic `inlineContent`, which makes it a better fit for dedicated inline image placeholder strategies.
+
+## Current Capabilities
+
+- Headings
+- Paragraphs
+- Quotes
+- Ordered and unordered lists
+- Nested lists
+- Task lists
+- Fenced code blocks and indented code blocks
+- Horizontal rules
+- Tables with alignment metadata
+- HTML blocks
+- Image blocks
+- Inline bold, italic, strikethrough, code, links, and inline image tokens
+- Block and inline math structure parsing
+- Fallback rendering for unsupported syntax
+
+## Advantages
+
+### 1. Clear layering
+
+Parsing, modeling, and rendering are decoupled, which makes the project easier to evolve.
+
+### 2. Built for Compose Multiplatform
+
+The core logic lives in `commonMain`, making it naturally suited for shared UI and cross-platform reuse.
+
+### 3. Strong customization support
+
+It supports not only unified style overrides, but also partial control over images, HTML blocks, block-level rendering, and inline rendering.
+
+### 4. Easy to integrate
+
+It supports both direct string rendering and pre-parsed document rendering, which works well for lists, caching scenarios, and rich text display.
+
+### 5. Safe fallback strategy
+
+Unsupported Markdown structures are not silently dropped. They can still be preserved through fallback blocks such as `UnsupportedBlock`.
+
+## Dependencies
 
 ```kotlin
-Markdown(
-    markdown = markdown,
-    inlineContent = { inline, style, defaultContent ->
-        when (inline) {
-            is StrikeInline -> withStyle(
-                SpanStyle(
-                    color = style.linkColor,
-                    textDecoration = TextDecoration.LineThrough,
-                ),
-            ) {
-                defaultContent()
-            }
-
-            else -> defaultContent()
-        }
-    },
-)
+sourceSets {
+    commonMain.dependencies {
+        implementation("org.jetbrains:markdown:0.7.3")
+        implementation("io.coil-kt.coil3:coil-compose:3.0.4")
+    }
+}
 ```
 
-`inlineImageContent` 会优先于通用的 `inlineContent`，适合专门处理 `InlineImage` 的文本化展示策略。
+## Roadmap
 
-## Debug Entry
+- [x] Custom styles
+- [ ] LaTeX formula rendering
+- [ ] Native rendering support for iOS and macOS
 
-- Desktop: `./gradlew run`
-- Android: set `ANDROID_HOME` or create `local.properties`, then run `./gradlew installDebug`
-
-Debug app file:
-- `src/commonMain/kotlin/com/composemarkdown/MarkdownDebugApp.kt`
-
-## Current Limitations
-
-- Unsupported Markdown constructs are rendered as raw text fallback blocks
-- The project is a renderer component, not a Markdown editor
