@@ -1,68 +1,143 @@
 # ComposeMarkdown
 
-Block-first Markdown editor component for Compose Multiplatform.
+A Compose Multiplatform Markdown component focused on parsing and rendering Markdown content in shared UI.
 
-## Dependency (KMP commonMain)
+## Features
+
+- `MdDocument` + `MdBlock`/`MdInline` render model
+- `MarkdownParser` based on JetBrains Markdown AST
+- `Markdown(...)` composable for rendering Markdown strings or pre-parsed documents
+- `MarkdownStyle` + `MarkdownDefaults` for style customization
+- Custom link and image click callbacks
+- Optional custom image renderer slot
+- Optional custom block renderer slot with default-content fallback
+- Optional dedicated HTML block renderer slot
+- Optional dedicated inline-image renderer slot
+- Optional inline rendering slot based on `AnnotatedString.Builder`
+- Table alignment metadata mapped into the render model
+- HTML block support rendered as dedicated raw-content blocks
+- GFM strikethrough inline support
+- GFM inline math and block math support
+- `UnsupportedBlock` fallback to avoid silently dropping unsupported syntax
+
+## Dependency
 
 ```kotlin
 sourceSets {
     commonMain.dependencies {
         implementation("org.jetbrains:markdown:0.7.3")
+        implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     }
 }
 ```
 
-## What is implemented
+## Package Layout
 
-- `MdDocument` + `MdBlock`/`MdInline` data model
-- `MarkdownParser` (JetBrains Markdown AST -> block/inline render model)
-- `MarkdownBlockEditor` composable:
-  - `LazyColumn` with stable block keys
-  - only current block enters edit mode (`BasicTextField`)
-  - other blocks stay in render mode
-  - on blur commit and full re-parse
-  - task checkbox toggle writes back to markdown source
+- `com.composemarkdown.model`: document and inline/block model
+- `com.composemarkdown.parser`: Markdown parsing
+- `com.composemarkdown.ui`: public composables and styles
 
-Implemented file:
-- `/Users/xx/Projects/ComposeMarkdown/src/commonMain/kotlin/com/composemarkdown/MarkdownEditor.kt`
-
-## Supported syntax (current)
+## Supported Syntax
 
 - Heading
 - Paragraph
 - Quote
-- List (ordered/unordered, basic nesting by indent)
+- List and nested list
 - Task list
-- Code fence
+- Code fence and indented code block
 - Horizontal rule
-- Table (basic pipe table)
+- Pipe table with start/center/end alignment
+- HTML block
+- Block math
 - Image block
-- Inline: emphasis, strong, code, link, inline image token
+- Inline emphasis, strong, strikethrough, code, math, link, inline image token
 
 ## Usage
 
 ```kotlin
-var markdown by remember { mutableStateOf("# Title\n\n- [ ] task") }
+import com.composemarkdown.ui.Markdown
 
-MarkdownBlockEditor(
+val markdown = """
+# Title
+
+This is **Compose Markdown** with a [link](https://kotlinlang.org).
+""".trimIndent()
+
+Markdown(
     markdown = markdown,
-    onMarkdownChange = { markdown = it },
-    onLinkClick = { url -> /* open link */ },
-    onImageClick = { url -> /* open image */ },
+    onLinkClick = { url -> println(url) },
+    onImageClick = { url -> println(url) },
 )
 ```
 
-## Debug entry
+## Pre-parsed Usage
 
-- Desktop:
-  - `./gradlew run`
-- Android:
-  - set `ANDROID_HOME` or create `local.properties` with `sdk.dir=...`
-  - then run `./gradlew installDebug`
+```kotlin
+import com.composemarkdown.parser.MarkdownParser
+import com.composemarkdown.ui.Markdown
+
+val parser = MarkdownParser()
+val document = parser.parse(markdown)
+
+Markdown(document = document)
+```
+
+## Customization
+
+```kotlin
+Markdown(
+    markdown = markdown,
+    htmlBlockContent = { htmlBlock ->
+        // render raw html block your own way
+    },
+    inlineImageContent = { inlineImage, style ->
+        withStyle(SpanStyle(color = style.linkColor)) {
+            append("[img:${inlineImage.alt ?: inlineImage.url}]")
+        }
+    },
+    style = MarkdownDefaults.style(),
+    imageContent = { image ->
+        // render your own image composable
+    },
+    blockContent = { block, defaultContent ->
+        defaultContent()
+    },
+)
+```
+
+## Inline Customization
+
+```kotlin
+Markdown(
+    markdown = markdown,
+    inlineContent = { inline, style, defaultContent ->
+        when (inline) {
+            is StrikeInline -> withStyle(
+                SpanStyle(
+                    color = style.linkColor,
+                    textDecoration = TextDecoration.LineThrough,
+                ),
+            ) {
+                defaultContent()
+            }
+
+            else -> defaultContent()
+        }
+    },
+)
+```
+
+`inlineImageContent` 会优先于通用的 `inlineContent`，适合专门处理 `InlineImage` 的文本化展示策略。
+
+## Debug Entry
+
+- Desktop: `./gradlew run`
+- Android: set `ANDROID_HOME` or create `local.properties`, then run `./gradlew installDebug`
 
 Debug app file:
-- `/Users/xx/Projects/ComposeMarkdown/src/commonMain/kotlin/com/composemarkdown/MarkdownDebugApp.kt`
+- `src/commonMain/kotlin/com/composemarkdown/MarkdownDebugApp.kt`
 
-## Next step
+## Current Limitations
 
-Add neighborhood incremental re-parse (`edited block +/- N lines`) and table alignment metadata mapping.
+- Unsupported Markdown constructs are rendered as raw text fallback blocks
+- The project is a renderer component, not a Markdown editor
